@@ -20,7 +20,7 @@ OPTIONS:
 
 EXAMPLE:
 
-    sudo ./synology.sh -i 203.0.113.123 -m /volume1/media -t /volume1/tftp -p /volume1/packages 
+    sudo ./synology.sh -i "203.0.113.123" -m "/volume1/media" -t "/volume1/tftp" -p "/volume1/packages" 
 
 EOF
 }
@@ -51,7 +51,7 @@ do
              TFTPBOOTDIR=$OPTARG
              ;;
          p)
-             INSTALLDIR=1
+             INSTALLDIR=$OPTARG
              ;;
          v)
              VERBOSE=1
@@ -83,6 +83,9 @@ then
      usage
      exit 1
 fi
+
+rm -Rf "$TFTPBOOTDIR/pxelinux.cfg"
+
 MENUPATH="$TFTPBOOTDIR/pxelinux.cfg/default"
 
 #----------------------------------------------------------------------------
@@ -94,5 +97,60 @@ cp -R * "$TFTPBOOTDIR"
 cd $CURRENTDIR
 
 #----------------------------------------------------------------------------
-# Copy PXE files to TFTP store
+# Prepare CentOS
 #----------------------------------------------------------------------------
+OS="CentOS"
+OS_TEXT="CentOS"
+VERSION="7.2";
+ARCH="x86_64";
+ARCH_TEXT="64-bit";
+URI="http://192.168.1.4/depot/centos/7/CentOS-7-x86_64-Everything-1511.iso";
+# URI="http://mirror.nexcess.net/CentOS/7.2.1511/isos/x86_64/CentOS-7-x86_64-Everything-1511.iso";
+MEDIAPATH="$MEDIADIR/$OS/$VERSION/$ARCH/CentOS-7-x86_64-DVD-1511.iso"
+BOOTDIR="$TFTPBOOTDIR/$OS/$VERSION/$PLATFORM/$ARCH";
+PACKAGESDIR="$INSTALLDIR/$OS/$VERSION/$PLATFORM/$ARCH";
+
+mkdir -p "$TFTPBOOTDIR/pxelinux.cfg/$OS"
+mkdir -p "$MEDIADIR/$OS/$VERSION/$ARCH"
+
+if [ ! -f "$MEDIAPATH" ]; then
+    wget "$URI" -O "$MEDIAPATH"
+fi
+
+if [ ! -d "$BOOTDIR" ]; then
+	mkdir -p "$BOOTDIR"
+	mkdir -p "$PACKAGESDIR"
+	mkdir -p /mnt/loop
+	mount -o loop -t iso9660 "$MEDIAPATH" /mnt/loop
+	cp /mnt/loop/images/pxeboot/* "$BOOTDIR"
+	cp -R /mnt/loop/* "$PACKAGESDIR"
+	cp -R /mnt/loop/.disk "$PACKAGESDIR"
+	umount /mnt/loop
+fi
+
+cat << EOF >> "$MENUPATH"
+MENU BEGIN $OS_TEXT
+MENU TITLE $OS_TEXT 
+    LABEL Previous
+    MENU LABEL Previous Menu
+    TEXT HELP
+    Return to previous menu
+    ENDTEXT
+    MENU EXIT
+    MENU SEPARATOR
+    MENU INCLUDE pxelinux.cfg/$OS/$OS.menu
+MENU END 
+EOF
+
+if [ ! -f "$TFTPBOOTDIR/pxelinux.cfg/$OS/$OS.menu" ]; then
+cat << EOF >> "$TFTPBOOTDIR/pxelinux.cfg/$OS/$OS.menu"
+LABEL 2
+    MENU LABEL $OS_TEXT $VERSION ($ARCH_TEXT)
+    KERNEL images/$OS/$VERSION/$ARCH/vmlinuz
+    APPEND ks=http://$INSTALLIP/$OS/$VERSION/$ARCH/ks.cfg lang=us keymap=us ip=dhcp ksdevice=eth0 noipv6 initrd=images/$OS/$VERSION/$ARCH/initrd.img ramdisk_size=10000
+    TEXT HELP
+    Install $OS $VERSION ($ARCH_TEXT)
+    ENDTEXT
+EOF
+fi
+
