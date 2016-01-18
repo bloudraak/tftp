@@ -107,26 +107,26 @@ ARCH_TEXT="64-bit";
 URI="http://192.168.1.4/depot/centos/7/CentOS-7-x86_64-Everything-1511.iso";
 # URI="http://mirror.nexcess.net/CentOS/7.2.1511/isos/x86_64/CentOS-7-x86_64-Everything-1511.iso";
 MEDIAPATH="$MEDIADIR/$OS/$VERSION/$ARCH/CentOS-7-x86_64-DVD-1511.iso"
-BOOTDIR="$TFTPBOOTDIR/$OS/$VERSION/$PLATFORM/$ARCH";
-PACKAGESDIR="$INSTALLDIR/$OS/$VERSION/$PLATFORM/$ARCH";
-
-mkdir -p "$TFTPBOOTDIR/pxelinux.cfg/$OS"
-mkdir -p "$MEDIADIR/$OS/$VERSION/$ARCH"
+BOOTDIR="$TFTPBOOTDIR/images/$OS/$VERSION/$PLATFORM/$ARCH";
+PACKAGESDIR="$INSTALLDIR/$OS/$VERSION/$ARCH";
 
 if [ ! -f "$MEDIAPATH" ]; then
+    mkdir -p "$MEDIADIR/$OS/$VERSION/$ARCH"
     wget "$URI" -O "$MEDIAPATH"
 fi
 
+mkdir -p /mnt/loop
+mount -o loop -t iso9660 "$MEDIAPATH" /mnt/loop
+
 if [ ! -d "$BOOTDIR" ]; then
 	mkdir -p "$BOOTDIR"
-	mkdir -p "$PACKAGESDIR"
-	mkdir -p /mnt/loop
-	mount -o loop -t iso9660 "$MEDIAPATH" /mnt/loop
 	cp /mnt/loop/images/pxeboot/* "$BOOTDIR"
-	cp -R /mnt/loop/* "$PACKAGESDIR"
-	cp -R /mnt/loop/.disk "$PACKAGESDIR"
-	umount /mnt/loop
 fi
+if [ ! -d "$PACKAGESDIR" ]; then
+	mkdir -p "$PACKAGESDIR"
+	cp -R /mnt/loop/* "$PACKAGESDIR"
+fi
+umount /mnt/loop
 
 cat << EOF >> "$MENUPATH"
 MENU BEGIN $OS_TEXT
@@ -142,12 +142,13 @@ MENU TITLE $OS_TEXT
 MENU END 
 EOF
 
+mkdir -p "$TFTPBOOTDIR/pxelinux.cfg/$OS"
 if [ ! -f "$TFTPBOOTDIR/pxelinux.cfg/$OS/$OS.menu" ]; then
 cat << EOF >> "$TFTPBOOTDIR/pxelinux.cfg/$OS/$OS.menu"
 LABEL 2
     MENU LABEL $OS_TEXT $VERSION ($ARCH_TEXT)
     KERNEL images/$OS/$VERSION/$ARCH/vmlinuz
-    APPEND ks=http://$INSTALLIP/$OS/$VERSION/$ARCH/ks.cfg lang=us keymap=us ip=dhcp ksdevice=eth0 noipv6 initrd=images/$OS/$VERSION/$ARCH/initrd.img ramdisk_size=10000
+    APPEND url --url http://$INSTALLIP/$OS/$VERSION/$ARCH/ lang=us keymap=us ip=dhcp ksdevice=eth0 noipv6 initrd=images/$OS/$VERSION/$ARCH/initrd.img ramdisk_size=10000
     TEXT HELP
     Install $OS $VERSION ($ARCH_TEXT)
     ENDTEXT
